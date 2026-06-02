@@ -2,7 +2,7 @@ import os
 import re
 import subprocess
 import zipfile
-from datetime import datetime  # <-- Added for current date
+from datetime import datetime
 from io import BytesIO
 import pandas as pd
 import streamlit as st
@@ -28,10 +28,12 @@ def generate_pdf_bytes(row_data, flat_number):
         st.error(f"Template file '{TEMPLATE_FILE}' not found!")
         return None
 
+    # Crucial Fix: Ensure the Linux /tmp environment directory exists entirely
+    os.makedirs("/tmp", exist_ok=True)
+
     doc = Document(TEMPLATE_FILE)
 
     # Automatically inject the current date into the data dictionary
-    # Format 'B' is full month name, 'd' is day, 'Y' is 4-digit year
     row_data["Date"] = datetime.now().strftime("%B %d, %Y")
 
     # Replace placeholders in paragraphs
@@ -55,15 +57,18 @@ def generate_pdf_bytes(row_data, flat_number):
                                 placeholder, str(value)
                             )
 
-    # Use Linux /tmp directory for processing
+    # Temporary system locations
     tmp_docx = f"/tmp/Letter_Flat_{flat_number}.docx"
+    pdf_path = f"/tmp/Letter_Flat_{flat_number}.pdf"
+    
     doc.save(tmp_docx)
 
     # Convert DOCX to PDF using LibreOffice headless command line
     try:
-        libreoffice_path = "/usr/bin/libreoffice"
+        # Using general system call fallback in case path variations exist
+        libreoffice_cmd = "libreoffice"
         cmd = [
-            libreoffice_path,
+            libreoffice_cmd,
             "--headless",
             "--convert-to",
             "pdf",
@@ -71,27 +76,35 @@ def generate_pdf_bytes(row_data, flat_number):
             "/tmp",
             tmp_docx,
         ]
-        subprocess.run(
+        
+        # Captured stderr and stdout instead of feeding DEVNULL to track runtime blocks
+        result = subprocess.run(
             cmd,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             check=True,
             env={"HOME": "/tmp"},
         )
 
-        pdf_path = f"/tmp/Letter_Flat_{flat_number}.pdf"
+        # Safety validation to verify the file was successfully populated on disk
+        if not os.path.exists(pdf_path):
+            st.error(f"LibreOffice execution completed but no PDF found for Flat {flat_number}.")
+            if result.stderr:
+                st.code(result.stderr.decode())
+            return None
 
         # Read the generated PDF into memory
         with open(pdf_path, "rb") as f:
             pdf_bytes = f.read()
 
-        # Clean up temporary files
+        # Clean up temporary storage files immediately
         if os.path.exists(tmp_docx):
             os.remove(tmp_docx)
         if os.path.exists(pdf_path):
             os.remove(pdf_path)
 
         return pdf_bytes
+        
     except Exception as e:
         st.error(f"Error converting Flat {flat_number} via LibreOffice: {e}")
         return None
