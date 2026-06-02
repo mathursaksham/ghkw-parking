@@ -28,7 +28,7 @@ def generate_pdf_bytes(row_data, flat_number):
         st.error(f"Template file '{TEMPLATE_FILE}' not found!")
         return None
 
-    # Crucial Fix: Ensure the Linux /tmp environment directory exists entirely
+    # Ensure the Linux /tmp environment directory exists entirely
     os.makedirs("/tmp", exist_ok=True)
 
     doc = Document(TEMPLATE_FILE)
@@ -65,7 +65,6 @@ def generate_pdf_bytes(row_data, flat_number):
 
     # Convert DOCX to PDF using LibreOffice headless command line
     try:
-        # Using general system call fallback in case path variations exist
         libreoffice_cmd = "libreoffice"
         cmd = [
             libreoffice_cmd,
@@ -77,7 +76,6 @@ def generate_pdf_bytes(row_data, flat_number):
             tmp_docx,
         ]
         
-        # Captured stderr and stdout instead of feeding DEVNULL to track runtime blocks
         result = subprocess.run(
             cmd,
             stdout=subprocess.PIPE,
@@ -86,11 +84,8 @@ def generate_pdf_bytes(row_data, flat_number):
             env={"HOME": "/tmp"},
         )
 
-        # Safety validation to verify the file was successfully populated on disk
         if not os.path.exists(pdf_path):
             st.error(f"LibreOffice execution completed but no PDF found for Flat {flat_number}.")
-            if result.stderr:
-                st.code(result.stderr.decode())
             return None
 
         # Read the generated PDF into memory
@@ -111,6 +106,7 @@ def generate_pdf_bytes(row_data, flat_number):
 
 
 # --- STREAMLIT FRONTEND ---
+st.set_page_config(layout="wide")
 st.title("🏢 GHKW Parking Allotments")
 
 df = load_data()
@@ -119,33 +115,139 @@ if not df.empty:
     if "Flat Number" not in df.columns:
         st.error("Excel sheet must contain a 'Flat Number' column.")
     else:
-        col1, col2 = st.columns(2)
+        # Initialize session state to track checked flats persistently across searches
+        if "selected_flats_tracker" not in st.session_state:
+            st.session_state.selected_flats_tracker = set()
+
+        col1, col2 = st.columns([3, 2])
 
         with col1:
-            st.header("Single Flat Print")
-            flat_list = df["Flat Number"].dropna().unique().tolist()
-            selected_flat = st.selectbox("Select Flat Number:", flat_list)
+            st.header("🔍 Search & Select Flats")
+            
+            # 1. Search filter input text box
+            search_query = st.text_input(
+                "Search by Flat / Block (e.g., 'C5', 'A', 'A1-003'):", 
+                placeholder="Type to filter rows..."
+            ).strip()
 
-            if st.button("Generate Letter"):
-                row = df[df["Flat Number"] == selected_flat].iloc[0].to_dict()
-                with st.spinner("Processing PDF..."):
-                    pdf_data = generate_pdf_bytes(row, selected_flat)
-                    if pdf_data:
-                        st.success("PDF ready for download!")
-                        st.download_button(
-                            label="⬇️ Save PDF to Desktop",
-                            data=pdf_data,
-                            file_name=f"Letter_Flat_{selected_flat}.pdf",
-                            mime="application/pdf",
-                        )
+            # 2. Filter the dataframe based on search query
+            if search_query:
+                # Case-insensitive partial string matching on 'Flat Number'
+                filtered_df = df[df["Flat Number"].str.contains(search_query, case=False, na=False)].copy()
+            else:
+                filtered_df = df.copy()
+
+            # 3. Apply state back to the filtered dataframe column
+            filtered_df.insert(
+                0, 
+                "Select", 
+                filtered_df["Flat Number"].apply(lambda x: x in st.session_state.selected_flats_tracker)
+            )
+
+            # 4. Action buttons to select/deselect filtered rows at once
+            btn_col1, btn_col2 = st.columns(2)
+            with btn_col1:
+                if st.button("✅ Check All Filtered Rows"):
+                    for f_num in filtered_df["Flat Number"]:
+                        st.session_state.selected_flats_tracker.add(f_num)
+                    st.rerun()
+            with btn_col2:
+                if st.button("❌ Uncheck All Filtered Rows"):
+                    for f_num in filtered_df["Flat Number"]:
+                        st.session_state.selected_flats_tracker.discard(f_num)
+                    st.rerun()
+
+            # 5. Render interactive data table
+            edited_df = st.data_editor(
+                filtered_df,
+                hide_index=True,
+                column_config={
+                    "Select": st.column_config.CheckboxColumn(
+                        "Select",
+                        help="Check to include this flat",
+                        default=False,
+                    )
+                },
+                disabled=[col for col in filtered_df.columns if col != "Select"],
+                use_container_width=True,
+                key="flat_data_editor"
+            )
+
+            # 6. Capture individual checklist edits from user interactions
+            if edited_df is not None:
+                for _, row in edited_df.iterrows():
+                    f_num = row["Flat Number"]
+                    if row["Select"]:
+                        st.session_state.selected_flats_tracker.add(f_num)
+                    else:
+                        st.session_state.selected_flats_tracker.discard(f_num)
+
+            # Get full data rows for all verified checked flats
+            current_selections = list(st.session_state.selected_flats_tracker)
+            selected_rows = df[df["Flat Number"].isin(current_selections)]
+
+            st.write(f"📂 **Total unique flats selected overall:** {len(current_selections)}")
+            if len(current_selections) > 0:
+                with st.expander("See selected list"):
+                    st.write(", ".join(sorted(current_selections)))
+
+            # 7. File Compiler Trigger
+            if st.button("Generate Letters for Chosen Rows"):
+                if not current_selections:
+                    st.warning("Please select or search-check at least one flat checkbox above.")
+                
+                # Case A: Exactly 1 checked -> Direct PDF download
+                elif len(current_selections) == 1:
+                    flat = current_selections[0]
+                    row = selected_rows[selected_rows["Flat Number"] == flat].iloc[0].to_dict()
+                    
+                    with st.spinner(f"Processing PDF for Flat {flat}..."):
+                        pdf_data = generate_pdf_bytes(row, flat)
+                        if pdf_data:
+                            st.success(f"PDF for Flat {flat} ready!")
+                            st.download_button(
+                                label="⬇️ Save PDF to Desktop",
+                                data=pdf_data,
+                                file_name=f"Letter_Flat_{flat}.pdf",
+                                mime="application/pdf",
+                            )
+                
+                # Case B: Multiple checked -> Package to ZIP file
+                else:
+                    with st.spinner("Processing chosen layout configurations..."):
+                        zip_buffer = BytesIO()
+                        progress_bar = st.progress(0)
+                        total = len(current_selections)
+                        processed_count = 0
+
+                        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+                            for index, flat in enumerate(current_selections):
+                                row = selected_rows[selected_rows["Flat Number"] == flat].iloc[0].to_dict()
+                                pdf_data = generate_pdf_bytes(row, flat)
+                                if pdf_data:
+                                    zip_file.writestr(f"Letter_Flat_{flat}.pdf", pdf_data)
+                                    processed_count += 1
+
+                                progress_bar.progress((index + 1) / total)
+
+                        if processed_count > 0:
+                            st.success(f"Successfully packaged {processed_count} letters!")
+                            st.download_button(
+                                label="⬇️ Download Selected PDFs (ZIP)",
+                                data=zip_buffer.getvalue(),
+                                file_name="Selected_Parking_Letters.zip",
+                                mime="application/zip",
+                            )
+                        else:
+                            st.error("Failed to generate PDFs for the chosen flats.")
 
         with col2:
-            st.header("Bulk Parking Print")
+            st.header("🚀 Bulk Parking Print")
             st.write(
                 "Compile all letters with assigned parking spaces into a ZIP file."
             )
 
-            if st.button("🚀 Prepare All Parkings"):
+            if st.button("Prepare All Parkings"):
                 if "Parking" in df.columns:
                     parking_df = df[
                         df["Parking"].notna() & (df["Parking"] != "")
