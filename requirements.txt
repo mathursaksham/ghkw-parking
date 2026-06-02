@@ -3,3 +3,4 @@ openpyxl
 python-docx
 docx2pdf
 streamlit
+libreoffice
