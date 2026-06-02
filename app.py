@@ -124,27 +124,26 @@ if not df.empty:
         with col1:
             st.header("🔍 Search & Select Flats")
             
-            # 1. Search filter input text box
+            # Search filter input text box
             search_query = st.text_input(
                 "Search by Flat / Block (e.g., 'C5', 'A', 'A1-003'):", 
                 placeholder="Type to filter rows..."
             ).strip()
 
-            # 2. Filter the dataframe based on search query
+            # Filter the dataframe based on search query
             if search_query:
-                # Case-insensitive partial string matching on 'Flat Number'
                 filtered_df = df[df["Flat Number"].str.contains(search_query, case=False, na=False)].copy()
             else:
                 filtered_df = df.copy()
 
-            # 3. Apply state back to the filtered dataframe column
+            # Apply state back to the filtered dataframe column
             filtered_df.insert(
                 0, 
                 "Select", 
                 filtered_df["Flat Number"].apply(lambda x: x in st.session_state.selected_flats_tracker)
             )
 
-            # 4. Action buttons to select/deselect filtered rows at once
+            # Action buttons to select/deselect filtered rows at once
             btn_col1, btn_col2 = st.columns(2)
             with btn_col1:
                 if st.button("✅ Check All Filtered Rows"):
@@ -157,7 +156,7 @@ if not df.empty:
                         st.session_state.selected_flats_tracker.discard(f_num)
                     st.rerun()
 
-            # 5. Render interactive data table
+            # Render interactive data table (FIXED: updated use_container_width to width='stretch')
             edited_df = st.data_editor(
                 filtered_df,
                 hide_index=True,
@@ -169,11 +168,11 @@ if not df.empty:
                     )
                 },
                 disabled=[col for col in filtered_df.columns if col != "Select"],
-                use_container_width=True,
+                width="stretch",
                 key="flat_data_editor"
             )
 
-            # 6. Capture individual checklist edits from user interactions
+            # Capture individual checklist edits from user interactions
             if edited_df is not None:
                 for _, row in edited_df.iterrows():
                     f_num = row["Flat Number"]
@@ -191,7 +190,7 @@ if not df.empty:
                 with st.expander("See selected list"):
                     st.write(", ".join(sorted(current_selections)))
 
-            # 7. File Compiler Trigger
+            # File Compiler Trigger
             if st.button("Generate Letters for Chosen Rows"):
                 if not current_selections:
                     st.warning("Please select or search-check at least one flat checkbox above.")
