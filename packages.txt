@@ -1,2 +1,2 @@
-libreoffice-headless
+libreoffice
 fonts-dejavu
