@@ -19,10 +19,8 @@ TEMPLATE_FILE = "template.docx"  # Path to your Word template
 # Fetch email configurations securely
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
-SENDER_EMAIL = os.getenv("SENDER_EMAIL", "your_email@gmail.com")
-SENDER_PASSWORD = os.getenv(
-    "SENDER_PASSWORD", "your_app_password"
-)  # Use App Password for Gmail
+SENDER_EMAIL = os.getenv("SENDER_EMAIL", "ghkwparkingallotments@gmail.com")
+SENDER_PASSWORD = os.getenv("SENDER_PASSWORD", "mjqy ohdf beeg vngh")  # Use App Password for Gmail
 
 
 # --- AUTHENTICATION FUNCTIONS ---
@@ -62,7 +60,7 @@ def render_login_page():
 
     with auth_col:
         st.markdown(
-            "<h2 style='text-align: center;'>🔒 Portal Authentication</h2>",
+            "<h2 style='text-align: center;'>🔒 GHKW Portal Authentication</h2>",
             unsafe_allow_html=True,
         )
         st.write("Please authenticate with your registered email to gain access.")
