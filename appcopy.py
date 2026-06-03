@@ -36,11 +36,11 @@ try:
     SENDER_EMAIL = os.getenv("SENDER_EMAIL", "ghkwparkingallotments@gmail.com")
     SENDER_PASSWORD = os.getenv("SENDER_PASSWORD", "mjqy ohdf beeg vngh")  # Use App Password for Gmail
 
-except Exception:
-    st.error(
-        "Missing secret configurations! Please check your `.streamlit/secrets.toml` file."
-    )
-    st.stop()
+# except Exception:
+#     st.error(
+#         "Missing secret configurations! Please check your `.streamlit/secrets.toml` file."
+#     )
+#     st.stop()
 
 
 # --- 3. AUTHENTICATION FUNCTIONS ---
