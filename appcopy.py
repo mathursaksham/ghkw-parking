@@ -1,3 +1,4 @@
+import logging
 import os
 import random
 import re
@@ -12,18 +13,37 @@ import pandas as pd
 import streamlit as st
 from docx import Document
 
-# --- CONFIGURATION & ENV VARIABLES ---
+# --- 1. LOGGING CONFIGURATION ---
+# This automatically sets up or appends to 'app.log' in your root directory
+logging.basicConfig(
+    filename="app.log",
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+
+# --- 2. CONFIGURATION & SECRETS ---
 EXCEL_FILE = "data.xlsx"  # Path to your Excel file
 TEMPLATE_FILE = "template.docx"  # Path to your Word template
 
-# Fetch email configurations securely
-SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
-SENDER_EMAIL = os.getenv("SENDER_EMAIL", "ghkwparkingallotments@gmail.com")
-SENDER_PASSWORD = os.getenv("SENDER_PASSWORD", "mjqy ohdf beeg vngh")  # Use App Password for Gmail
+# Define who can view the raw log file directly inside the app interface
+SUPERADMIN_EMAIL = "superadmin@ghkw.com"
+
+# Fetch email configurations securely from st.secrets
+try:
+    SMTP_SERVER = st.secrets["SMTP_SERVER"]
+    SMTP_PORT = int(st.secrets["SMTP_PORT"])
+    SENDER_EMAIL = os.getenv("SENDER_EMAIL", "ghkwparkingallotments@gmail.com")
+    SENDER_PASSWORD = os.getenv("SENDER_PASSWORD", "mjqy ohdf beeg vngh")  # Use App Password for Gmail
+
+except Exception:
+    st.error(
+        "Missing secret configurations! Please check your `.streamlit/secrets.toml` file."
+    )
+    st.stop()
 
 
-# --- AUTHENTICATION FUNCTIONS ---
+# --- 3. AUTHENTICATION FUNCTIONS ---
 def send_otp_email(receiver_email, otp):
     """Sends a 6-digit OTP to the user's email."""
     msg = MIMEMultipart()
@@ -41,7 +61,7 @@ def send_otp_email(receiver_email, otp):
 
     try:
         server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
-        server.starttls()  # Upgrade connection to secure
+        server.starttls()
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
         server.send_message(msg)
         server.quit()
@@ -55,12 +75,11 @@ def render_login_page():
     """Renders the login and OTP validation UI."""
     st.set_page_config(page_title="GHKW Portal Login", page_icon="🔒", layout="centered")
 
-    # Center-align login container
     _, auth_col, _ = st.columns([1, 2, 1])
 
     with auth_col:
         st.markdown(
-            "<h2 style='text-align: center;'>🔒 GHKW Portal Authentication</h2>",
+            "<h2 style='text-align: center;'>🔒 Portal Authentication</h2>",
             unsafe_allow_html=True,
         )
         st.write("Please authenticate with your registered email to gain access.")
@@ -75,11 +94,9 @@ def render_login_page():
         # Step 1 Button: Request OTP
         if not st.session_state.otp_sent:
             if st.button("Send OTP", use_container_width=True):
-                # Simple Email validation regex
                 if not re.match(r"[^@]+@[^@]+\.[^@]+", email_input):
                     st.error("Please enter a valid email address.")
                 else:
-                    # Generate a random 6-digit code
                     generated_otp = str(random.randint(100000, 999999))
                     with st.spinner("Sending security code..."):
                         if send_otp_email(email_input, generated_otp):
@@ -101,6 +118,12 @@ def render_login_page():
                 if st.button("Verify & Login", use_container_width=True):
                     if otp_input == st.session_state.generated_otp:
                         st.session_state.authenticated = True
+
+                        # AUDIT LOG: Successful entry
+                        logging.info(
+                            f"USER_LOGIN | Email: {st.session_state.target_email} | Status: SUCCESS"
+                        )
+
                         st.success("Access Granted!")
                         st.rerun()
                     else:
@@ -113,7 +136,7 @@ def render_login_page():
                     st.rerun()
 
 
-# --- INITIALIZE AUTH SESSION STATE ---
+# --- 4. INITIALIZE AUTH SESSION STATE ---
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 if "otp_sent" not in st.session_state:
@@ -123,7 +146,7 @@ if "generated_otp" not in st.session_state:
 if "target_email" not in st.session_state:
     st.session_state.target_email = ""
 
-# --- ROUTE USER BASED ON AUTH STATUS ---
+# --- 5. ROUTE USER BASED ON AUTH STATUS ---
 if not st.session_state.authenticated:
     render_login_page()
 else:
@@ -219,6 +242,9 @@ else:
     with st.sidebar:
         st.write(f"👤 Logged in as: **{st.session_state.target_email}**")
         if st.button("Sign Out"):
+            # AUDIT LOG: Explicit Logout Tracker
+            logging.info(f"USER_LOGOUT | Email: {st.session_state.target_email}")
+
             st.session_state.authenticated = False
             st.session_state.otp_sent = False
             st.session_state.generated_otp = None
@@ -330,6 +356,11 @@ else:
                         with st.spinner(f"Processing PDF for Flat {flat}..."):
                             pdf_data = generate_pdf_bytes(row, flat)
                             if pdf_data:
+                                # AUDIT LOG: Single PDF print action
+                                logging.info(
+                                    f"ACTION | User: {st.session_state.target_email} | Generated single PDF for Flat: {flat}"
+                                )
+
                                 st.success(f"PDF for Flat {flat} ready!")
                                 st.download_button(
                                     label="⬇️ Save PDF to Desktop",
@@ -370,6 +401,11 @@ else:
                                     progress_bar.progress((index + 1) / total)
 
                             if processed_count > 0:
+                                # AUDIT LOG: Multiple PDF selection print action
+                                logging.info(
+                                    f"ACTION | User: {st.session_state.target_email} | Generated ZIP for {processed_count} flats: {current_selections}"
+                                )
+
                                 st.success(
                                     f"Successfully packaged {processed_count} letters!"
                                 )
@@ -423,6 +459,11 @@ else:
 
                                 progress_bar.progress((index + 1) / total)
 
+                        # AUDIT LOG: Full Database Export Triggered
+                        logging.info(
+                            f"ACTION | User: {st.session_state.target_email} | Generated BULK ZIP for all {len(parking_df)} parking records"
+                        )
+
                         st.success("ZIP package generated successfully!")
                         st.download_button(
                             label="⬇️ Download All PDFs (ZIP)",
@@ -430,3 +471,28 @@ else:
                             file_name="All_Parking_Letters.zip",
                             mime="application/zip",
                         )
+
+    # --- 6. SECURE COMPLIANCE VIEWER FOR SUPERADMIN ---
+    if st.session_state.target_email == SUPERADMIN_EMAIL:
+        st.write("---")
+        st.subheader("📋 System Audit Logs (Admin Only)")
+
+        if os.path.exists("app.log"):
+            with open("app.log", "r") as f:
+                log_content = f.read()
+
+            st.text_area(
+                "Live App Activity History",
+                value=log_content,
+                height=250,
+                disabled=True,
+            )
+
+            st.download_button(
+                label="⬇️ Download Security Log File",
+                data=log_content,
+                file_name=f"ghkw_audit_log_{datetime.now().strftime('%Y%m%d')}.txt",
+                mime="text/plain",
+            )
+        else:
+            st.info("System initializing. Logs are clean.")
