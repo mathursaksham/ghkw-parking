@@ -27,7 +27,7 @@ EXCEL_FILE = "data.xlsx"  # Path to your Excel file
 TEMPLATE_FILE = "template.docx"  # Path to your Word template
 
 # Define who can view the raw log file directly inside the app interface
-SUPERADMIN_EMAIL = "ghkwparkingallotments@ghkw.com"
+SUPERADMIN_EMAIL = "ghkwparkingallotments@gmail.com"
 
 # Fetch email configurations securely
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
