@@ -14,7 +14,7 @@ import streamlit as st
 from docx import Document
 
 # --- STREAMLIT FRONTEND ---
-    st.set_page_config(layout="wide")
+st.set_page_config(layout="wide")
 
     # Add Logout & Clear Cache Buttons to Sidebar
     with st.sidebar:
