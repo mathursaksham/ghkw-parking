@@ -13,6 +13,29 @@ import pandas as pd
 import streamlit as st
 from docx import Document
 
+# --- STREAMLIT FRONTEND ---
+    st.set_page_config(layout="wide")
+
+    # Add Logout & Clear Cache Buttons to Sidebar
+    with st.sidebar:
+        st.write(f"👤 Logged in as: **{st.session_state.target_email}**")
+        
+        # --- NEW: Clear Cache Button ---
+        if st.button("🔄 Reload Excel Data"):
+            st.cache_data.clear()
+            st.success("Cache cleared! Fetching latest Excel data...")
+            st.rerun()  # Forces the app to refresh and read the file immediately
+        # -------------------------------
+
+        if st.button("Sign Out"):
+            # 📝 AUDIT LOG: Explicit Exit Tracking
+            logging.info(f"USER_LOGOUT | Email: {st.session_state.target_email}")
+
+            st.session_state.authenticated = False
+            st.session_state.otp_sent = False
+            st.session_state.generated_otp = None
+            st.rerun()
+
 # --- 1. LOGGING CONFIGURATION ---
 # This automatically sets up or appends to 'app.log' in your root directory
 logging.basicConfig(
