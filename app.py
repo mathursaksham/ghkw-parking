@@ -9,12 +9,16 @@ from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from io import BytesIO
+
 import pandas as pd
 import streamlit as st
 from docx import Document
 
-# --- 1. LOGGING CONFIGURATION ---
-# This automatically sets up or appends to 'app.log' in your root directory
+# --- 1. PAGE CONFIGURATION ---
+# This MUST be the first Streamlit command and flush against the left margin.
+st.set_page_config(page_title="GHKW Portal", page_icon="🔒", layout="wide")
+
+# --- 2. LOGGING CONFIGURATION ---
 logging.basicConfig(
     filename="app.log",
     level=logging.INFO,
@@ -22,23 +26,19 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 
-# --- CONFIGURATION & ENV VARIABLES ---
+# --- 3. CONFIGURATION & ENV VARIABLES ---
 EXCEL_FILE = "data.xlsx"  # Path to your Excel file
 TEMPLATE_FILE = "template.docx"  # Path to your Word template
 
-# Define who can view the raw log file directly inside the app interface
 SUPERADMIN_EMAIL = "ghkwparkingallotments@gmail.com"
 
-# Fetch email configurations securely
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
 SENDER_EMAIL = os.getenv("SENDER_EMAIL", "ghkwparkingallotments@gmail.com")
-SENDER_PASSWORD = os.getenv(
-    "SENDER_PASSWORD", "mjqy ohdf beeg vngh"
-)  # Use App Password for Gmail
+SENDER_PASSWORD = os.getenv("SENDER_PASSWORD", "mjqy ohdf beeg vngh")
 
 
-# --- AUTHENTICATION FUNCTIONS ---
+# --- 4. AUTHENTICATION FUNCTIONS ---
 def send_otp_email(receiver_email, otp):
     """Sends a 6-digit OTP to the user's email."""
     msg = MIMEMultipart()
@@ -56,7 +56,7 @@ def send_otp_email(receiver_email, otp):
 
     try:
         server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
-        server.starttls()  # Upgrade connection to secure
+        server.starttls()
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
         server.send_message(msg)
         server.quit()
@@ -68,8 +68,6 @@ def send_otp_email(receiver_email, otp):
 
 def render_login_page():
     """Renders the login and OTP validation UI."""
-    st.set_page_config(page_title="GHKW Portal Login", page_icon="🔒", layout="centered")
-
     # Center-align login container
     _, auth_col, _ = st.columns([1, 2, 1])
 
@@ -90,11 +88,9 @@ def render_login_page():
         # Step 1 Button: Request OTP
         if not st.session_state.otp_sent:
             if st.button("Send OTP", use_container_width=True):
-                # Simple Email validation regex
                 if not re.match(r"[^@]+@[^@]+\.[^@]+", email_input):
                     st.error("Please enter a valid email address.")
                 else:
-                    # Generate a random 6-digit code
                     generated_otp = str(random.randint(100000, 999999))
                     with st.spinner("Sending security code..."):
                         if send_otp_email(email_input, generated_otp):
@@ -104,24 +100,17 @@ def render_login_page():
                             st.success(f"OTP successfully sent to {email_input}")
                             st.rerun()
 
-        # Step 2: Input OTP (Visible only after sending OTP)
+        # Step 2: Input OTP
         if st.session_state.otp_sent:
             st.info(f"A code has been sent to **{st.session_state.target_email}**")
-            otp_input = st.text_input(
-                "Enter 6-Digit OTP", placeholder="******"
-            ).strip()
+            otp_input = st.text_input("Enter 6-Digit OTP", placeholder="******").strip()
 
             col_verify, col_reset = st.columns(2)
             with col_verify:
                 if st.button("Verify & Login", use_container_width=True):
                     if otp_input == st.session_state.generated_otp:
                         st.session_state.authenticated = True
-
-                        # 📝 AUDIT LOG: Successful entry tracker
-                        logging.info(
-                            f"USER_LOGIN | Email: {st.session_state.target_email} | Status: SUCCESS"
-                        )
-
+                        logging.info(f"USER_LOGIN | Email: {st.session_state.target_email} | Status: SUCCESS")
                         st.success("Access Granted!")
                         st.rerun()
                     else:
@@ -134,7 +123,7 @@ def render_login_page():
                     st.rerun()
 
 
-# --- INITIALIZE AUTH SESSION STATE ---
+# --- 5. INITIALIZE SESSION STATE ---
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 if "otp_sent" not in st.session_state:
@@ -144,11 +133,12 @@ if "generated_otp" not in st.session_state:
 if "target_email" not in st.session_state:
     st.session_state.target_email = ""
 
-# --- ROUTE USER BASED ON AUTH STATUS ---
+
+# --- 6. ROUTE USER BASED ON AUTH STATUS ---
 if not st.session_state.authenticated:
     render_login_page()
 else:
-    # --- CORE PARKING APPLICATION (Triggers only when Authenticated) ---
+    # --- CORE PARKING APPLICATION ---
 
     @st.cache_data
     def load_data():
@@ -168,7 +158,6 @@ else:
         doc = Document(TEMPLATE_FILE)
         row_data["Date"] = datetime.now().strftime("%B %d, %Y")
 
-        # Replace placeholders in paragraphs
         for paragraph in doc.paragraphs:
             for key, value in row_data.items():
                 placeholder = f"{{{{{key}}}}}"
@@ -177,7 +166,6 @@ else:
                         if placeholder in run.text:
                             run.text = run.text.replace(placeholder, str(value))
 
-        # Replace placeholders in tables
         for table in doc.tables:
             for row in table.rows:
                 for cell in row.cells:
@@ -185,9 +173,7 @@ else:
                         for key, value in row_data.items():
                             placeholder = f"{{{{{key}}}}}"
                             if placeholder in paragraph.text:
-                                paragraph.text = paragraph.text.replace(
-                                    placeholder, str(value)
-                                )
+                                paragraph.text = paragraph.text.replace(placeholder, str(value))
 
         tmp_docx = f"/tmp/Letter_Flat_{flat_number}.docx"
         pdf_path = f"/tmp/Letter_Flat_{flat_number}.pdf"
@@ -213,9 +199,7 @@ else:
             )
 
             if not os.path.exists(pdf_path):
-                st.error(
-                    f"LibreOffice conversion finished but no PDF found for Flat {flat_number}."
-                )
+                st.error(f"LibreOffice conversion finished but no PDF found for Flat {flat_number}.")
                 return None
 
             with open(pdf_path, "rb") as f:
@@ -228,26 +212,29 @@ else:
 
             return pdf_bytes
         except Exception as e:
-            st.error(
-                f"Error converting Flat {flat_number} via LibreOffice: {e}"
-            )
+            st.error(f"Error converting Flat {flat_number} via LibreOffice: {e}")
             return None
 
-    # --- STREAMLIT FRONTEND ---
-    st.set_page_config(layout="wide")
-
-    # Add Logout Button to Sidebar
+    # --- SIDEBAR (Includes Reload Data & Logout) ---
     with st.sidebar:
         st.write(f"👤 Logged in as: **{st.session_state.target_email}**")
-        if st.button("Sign Out"):
-            # 📝 AUDIT LOG: Explicit Exit Tracking
-            logging.info(f"USER_LOGOUT | Email: {st.session_state.target_email}")
+        
+        st.write("---")
+        # Clear Cache Button
+        if st.button("🔄 Reload Excel Data", use_container_width=True):
+            st.cache_data.clear()
+            st.success("Cache cleared! Fetching latest Excel data...")
+            st.rerun()
 
+        # Sign Out Button
+        if st.button("Sign Out", use_container_width=True):
+            logging.info(f"USER_LOGOUT | Email: {st.session_state.target_email}")
             st.session_state.authenticated = False
             st.session_state.otp_sent = False
             st.session_state.generated_otp = None
             st.rerun()
 
+    # --- MAIN INTERFACE ---
     st.title("🏢 GHKW Parking Allotments")
     df = load_data()
 
@@ -269,9 +256,7 @@ else:
 
                 if search_query:
                     filtered_df = df[
-                        df["Flat Number"].str.contains(
-                            search_query, case=False, na=False
-                        )
+                        df["Flat Number"].str.contains(search_query, case=False, na=False)
                     ].copy()
                 else:
                     filtered_df = df.copy()
@@ -279,9 +264,7 @@ else:
                 filtered_df.insert(
                     0,
                     "Select",
-                    filtered_df["Flat Number"].apply(
-                        lambda x: x in st.session_state.selected_flats_tracker
-                    ),
+                    filtered_df["Flat Number"].apply(lambda x: x in st.session_state.selected_flats_tracker),
                 )
 
                 btn_col1, btn_col2 = st.columns(2)
@@ -293,9 +276,7 @@ else:
                 with btn_col2:
                     if st.button("❌ Uncheck All Filtered Rows"):
                         for f_num in filtered_df["Flat Number"]:
-                            st.session_state.selected_flats_tracker.discard(
-                                f_num
-                            )
+                            st.session_state.selected_flats_tracker.discard(f_num)
                         st.rerun()
 
                 edited_df = st.data_editor(
@@ -308,9 +289,7 @@ else:
                             default=False,
                         )
                     },
-                    disabled=[
-                        col for col in filtered_df.columns if col != "Select"
-                    ],
+                    disabled=[col for col in filtered_df.columns if col != "Select"],
                     width="stretch",
                     key="flat_data_editor",
                 )
@@ -321,44 +300,27 @@ else:
                         if row["Select"]:
                             st.session_state.selected_flats_tracker.add(f_num)
                         else:
-                            st.session_state.selected_flats_tracker.discard(
-                                f_num
-                            )
+                            st.session_state.selected_flats_tracker.discard(f_num)
 
-                current_selections = list(
-                    st.session_state.selected_flats_tracker
-                )
+                current_selections = list(st.session_state.selected_flats_tracker)
                 selected_rows = df[df["Flat Number"].isin(current_selections)]
 
-                st.write(
-                    f"📂 **Total unique flats selected overall:** {len(current_selections)}"
-                )
+                st.write(f"📂 **Total unique flats selected overall:** {len(current_selections)}")
                 if len(current_selections) > 0:
                     with st.expander("See selected list"):
                         st.write(", ".join(sorted(current_selections)))
 
                 if st.button("Generate Letters for Chosen Rows"):
                     if not current_selections:
-                        st.warning(
-                            "Please select or search-check at least one flat checkbox above."
-                        )
-
+                        st.warning("Please select or search-check at least one flat checkbox above.")
                     elif len(current_selections) == 1:
                         flat = current_selections[0]
-                        row = (
-                            selected_rows[selected_rows["Flat Number"] == flat]
-                            .iloc[0]
-                            .to_dict()
-                        )
+                        row = selected_rows[selected_rows["Flat Number"] == flat].iloc[0].to_dict()
 
                         with st.spinner(f"Processing PDF for Flat {flat}..."):
                             pdf_data = generate_pdf_bytes(row, flat)
                             if pdf_data:
-                                # 📝 AUDIT LOG: Single PDF conversion action tracking
-                                logging.info(
-                                    f"ACTION | User: {st.session_state.target_email} | Generated single PDF for Flat: {flat}"
-                                )
-
+                                logging.info(f"ACTION | User: {st.session_state.target_email} | Generated single PDF for Flat: {flat}")
                                 st.success(f"PDF for Flat {flat} ready!")
                                 st.download_button(
                                     label="⬇️ Save PDF to Desktop",
@@ -366,47 +328,25 @@ else:
                                     file_name=f"Letter_Flat_{flat}.pdf",
                                     mime="application/pdf",
                                 )
-
                     else:
-                        with st.spinner(
-                            "Processing chosen layout configurations..."
-                        ):
+                        with st.spinner("Processing chosen layout configurations..."):
                             zip_buffer = BytesIO()
                             progress_bar = st.progress(0)
                             total = len(current_selections)
                             processed_count = 0
 
-                            with zipfile.ZipFile(
-                                zip_buffer, "w", zipfile.ZIP_DEFLATED
-                            ) as zip_file:
-                                for index, flat in enumerate(
-                                    current_selections
-                                ):
-                                    row = (
-                                        selected_rows[
-                                            selected_rows["Flat Number"] == flat
-                                        ]
-                                        .iloc[0]
-                                        .to_dict()
-                                    )
+                            with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+                                for index, flat in enumerate(current_selections):
+                                    row = selected_rows[selected_rows["Flat Number"] == flat].iloc[0].to_dict()
                                     pdf_data = generate_pdf_bytes(row, flat)
                                     if pdf_data:
-                                        zip_file.writestr(
-                                            f"Letter_Flat_{flat}.pdf", pdf_data
-                                        )
+                                        zip_file.writestr(f"Letter_Flat_{flat}.pdf", pdf_data)
                                         processed_count += 1
-
                                     progress_bar.progress((index + 1) / total)
 
                             if processed_count > 0:
-                                # 📝 AUDIT LOG: Zip collection generation action tracking
-                                logging.info(
-                                    f"ACTION | User: {st.session_state.target_email} | Generated ZIP archive for {processed_count} flats: {current_selections}"
-                                )
-
-                                st.success(
-                                    f"Successfully packaged {processed_count} letters!"
-                                )
+                                logging.info(f"ACTION | User: {st.session_state.target_email} | Generated ZIP archive for {processed_count} flats: {current_selections}")
+                                st.success(f"Successfully packaged {processed_count} letters!")
                                 st.download_button(
                                     label="⬇️ Download Selected PDFs (ZIP)",
                                     data=zip_buffer.getvalue(),
@@ -414,21 +354,15 @@ else:
                                     mime="application/zip",
                                 )
                             else:
-                                st.error(
-                                    "Failed to generate PDFs for the chosen flats."
-                                )
+                                st.error("Failed to generate PDFs for the chosen flats.")
 
             with col2:
                 st.header("🚀 Bulk Parking Print")
-                st.write(
-                    "Compile all letters with assigned parking spaces into a ZIP file."
-                )
+                st.write("Compile all letters with assigned parking spaces into a ZIP file.")
 
                 if st.button("Prepare All Parkings"):
                     if "Parking" in df.columns:
-                        parking_df = df[
-                            df["Parking"].notna() & (df["Parking"] != "")
-                        ]
+                        parking_df = df[df["Parking"].notna() & (df["Parking"] != "")]
                     else:
                         parking_df = df
 
@@ -439,29 +373,15 @@ else:
                         progress_bar = st.progress(0)
                         total = len(parking_df)
 
-                        with zipfile.ZipFile(
-                            zip_buffer, "w", zipfile.ZIP_DEFLATED
-                        ) as zip_file:
-                            for index, (_, row) in enumerate(
-                                parking_df.iterrows()
-                            ):
+                        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+                            for index, (_, row) in enumerate(parking_df.iterrows()):
                                 flat_num = row["Flat Number"]
-                                pdf_data = generate_pdf_bytes(
-                                    row.to_dict(), flat_num
-                                )
-
+                                pdf_data = generate_pdf_bytes(row.to_dict(), flat_num)
                                 if pdf_data:
-                                    zip_file.writestr(
-                                        f"Letter_Flat_{flat_num}.pdf", pdf_data
-                                    )
-
+                                    zip_file.writestr(f"Letter_Flat_{flat_num}.pdf", pdf_data)
                                 progress_bar.progress((index + 1) / total)
 
-                        # 📝 AUDIT LOG: Bulk all parking database compilation tracking
-                        logging.info(
-                            f"ACTION | User: {st.session_state.target_email} | Generated BULK ZIP for all {len(parking_df)} assigned parking records"
-                        )
-
+                        logging.info(f"ACTION | User: {st.session_state.target_email} | Generated BULK ZIP for all {len(parking_df)} assigned parking records")
                         st.success("ZIP package generated successfully!")
                         st.download_button(
                             label="⬇️ Download All PDFs (ZIP)",
@@ -470,7 +390,7 @@ else:
                             mime="application/zip",
                         )
 
-    # --- 6. SECURE COMPLIANCE VIEWER PANEL FOR SUPERADMIN ---
+    # --- 7. SECURE COMPLIANCE VIEWER PANEL FOR SUPERADMIN ---
     if st.session_state.target_email == SUPERADMIN_EMAIL:
         st.write("---")
         st.subheader("📋 System Audit Logs (Admin Only)")
@@ -479,12 +399,7 @@ else:
             with open("app.log", "r") as f:
                 log_content = f.read()
 
-            st.text_area(
-                "Live App Activity History",
-                value=log_content,
-                height=250,
-                disabled=True,
-            )
+            st.text_area("Live App Activity History", value=log_content, height=250, disabled=True)
 
             st.download_button(
                 label="⬇️ Download Security Log File",
