@@ -6,6 +6,7 @@ import smtplib
 import subprocess
 import zipfile
 from datetime import datetime
+from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from io import BytesIO
@@ -37,8 +38,59 @@ SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
 SENDER_EMAIL = os.getenv("SENDER_EMAIL", "ghkwparkingallotments@gmail.com")
 SENDER_PASSWORD = os.getenv("SENDER_PASSWORD", "mjqy ohdf beeg vngh")
 
+# Set max log size (1 MB = 1 * 1024 * 1024 bytes)
+MAX_LOG_SIZE_BYTES = 1 * 1024 * 1024 
 
-# --- 4. AUTHENTICATION FUNCTIONS ---
+
+# --- 4. AUTO-EMAIL LOGS UTILITY ---
+def check_and_email_logs():
+    """Checks log size. If over limit, emails it to admin and clears the log."""
+    log_file_path = "app.log"
+    
+    # Check if file exists and if its size exceeds the limit
+    if os.path.exists(log_file_path) and os.path.getsize(log_file_path) > MAX_LOG_SIZE_BYTES:
+        try:
+            msg = MIMEMultipart()
+            msg["From"] = SENDER_EMAIL
+            msg["To"] = SUPERADMIN_EMAIL
+            msg["Subject"] = f"Automated Log Backup: {datetime.now().strftime('%Y-%m-%d')}"
+
+            body = "The application log has reached the size limit. The backup is attached."
+            msg.attach(MIMEText(body, "plain"))
+
+            # Attach the log file
+            with open(log_file_path, "rb") as f:
+                attach = MIMEApplication(f.read(), _subtype="txt")
+                attach.add_header(
+                    "Content-Disposition", 
+                    "attachment", 
+                    filename=f"ghkw_audit_log_{datetime.now().strftime('%Y%m%d')}.txt"
+                )
+                msg.attach(attach)
+
+            # Send Email
+            server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+            server.starttls()
+            server.login(SENDER_EMAIL, SENDER_PASSWORD)
+            server.send_message(msg)
+            server.quit()
+
+            # If email succeeds, completely clear the log file to start fresh
+            with open(log_file_path, "w") as f:
+                f.truncate(0)
+                
+            # Log that a backup just happened
+            logging.info("SYSTEM | Log file reached capacity. Automatically emailed to admin and wiped clean.")
+
+        except Exception as e:
+            # We fail silently here so the app doesn't crash for regular users if SMTP hits a limit
+            print(f"Failed to auto-email logs: {e}")
+
+# Run the check every time the script executes
+check_and_email_logs()
+
+
+# --- 5. AUTHENTICATION FUNCTIONS ---
 def send_otp_email(receiver_email, otp):
     """Sends a 6-digit OTP to the user's email."""
     msg = MIMEMultipart()
@@ -127,7 +179,7 @@ def render_login_page():
                     st.rerun()
 
 
-# --- 5. INITIALIZE SESSION STATE ---
+# --- 6. INITIALIZE SESSION STATE ---
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 if "otp_sent" not in st.session_state:
@@ -138,7 +190,7 @@ if "target_email" not in st.session_state:
     st.session_state.target_email = ""
 
 
-# --- 6. ROUTE USER BASED ON AUTH STATUS ---
+# --- 7. ROUTE USER BASED ON AUTH STATUS ---
 if not st.session_state.authenticated:
     render_login_page()
 else:
@@ -394,7 +446,7 @@ else:
                             mime="application/zip",
                         )
 
-    # --- 7. SECURE COMPLIANCE VIEWER PANEL FOR SUPERADMIN ---
+    # --- 8. SECURE COMPLIANCE VIEWER PANEL FOR SUPERADMIN ---
     if st.session_state.target_email == SUPERADMIN_EMAIL:
         st.write("---")
         st.subheader("📋 System Audit Logs (Admin Only)")
