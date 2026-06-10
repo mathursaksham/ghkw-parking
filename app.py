@@ -36,7 +36,7 @@ SUPERADMIN_EMAIL = "ghkwparkingallotments@gmail.com"
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
 SENDER_EMAIL = os.getenv("SENDER_EMAIL", "ghkwparkingallotments@gmail.com")
-SENDER_PASSWORD = os.getenv("SENDER_PASSWORD", secrets.GMAIL_CODE)
+SENDER_PASSWORD = os.getenv("SENDER_PASSWORD", st.secrets["GMAIL_CODE"])
 
 # Set max log size (1 MB = 1 * 1024 * 1024 bytes)
 MAX_LOG_SIZE_BYTES = 1 * 1024 * 1024 
