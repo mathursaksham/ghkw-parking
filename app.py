@@ -62,7 +62,11 @@ def send_otp_email(receiver_email, otp):
         server.quit()
         return True
     except Exception as e:
-        st.sidebar.error(f"Failed to send email: {e}")
+        # 📝 AUDIT LOG: Silently log the real technical error for the admin
+        logging.error(f"SMTP Email Failure (Likely Limit Exceeded): {e}")
+        
+        # Show the friendly message to the user
+        st.error("The Site is experiencing high volume please retry in sometime.")
         return False
 
 
