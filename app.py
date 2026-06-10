@@ -412,39 +412,39 @@ else:
                             else:
                                 st.error("Failed to generate PDFs for the chosen flats.")
 
-            with col2:
-                st.header("🚀 Bulk Parking Print")
-                st.write("Compile all letters with assigned parking spaces into a ZIP file.")
+            # with col2:
+            #     st.header("🚀 Bulk Parking Print")
+            #     st.write("Compile all letters with assigned parking spaces into a ZIP file.")
 
-                if st.button("Prepare All Parkings"):
-                    if "Parking" in df.columns:
-                        parking_df = df[df["Parking"].notna() & (df["Parking"] != "")]
-                    else:
-                        parking_df = df
+            #     if st.button("Prepare All Parkings"):
+            #         if "Parking" in df.columns:
+            #             parking_df = df[df["Parking"].notna() & (df["Parking"] != "")]
+            #         else:
+            #             parking_df = df
 
-                    if parking_df.empty:
-                        st.warning("No records found with parking details.")
-                    else:
-                        zip_buffer = BytesIO()
-                        progress_bar = st.progress(0)
-                        total = len(parking_df)
+            #         if parking_df.empty:
+            #             st.warning("No records found with parking details.")
+            #         else:
+            #             zip_buffer = BytesIO()
+            #             progress_bar = st.progress(0)
+            #             total = len(parking_df)
 
-                        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-                            for index, (_, row) in enumerate(parking_df.iterrows()):
-                                flat_num = row["Flat Number"]
-                                pdf_data = generate_pdf_bytes(row.to_dict(), flat_num)
-                                if pdf_data:
-                                    zip_file.writestr(f"Letter_Flat_{flat_num}.pdf", pdf_data)
-                                progress_bar.progress((index + 1) / total)
+            #             with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            #                 for index, (_, row) in enumerate(parking_df.iterrows()):
+            #                     flat_num = row["Flat Number"]
+            #                     pdf_data = generate_pdf_bytes(row.to_dict(), flat_num)
+            #                     if pdf_data:
+            #                         zip_file.writestr(f"Letter_Flat_{flat_num}.pdf", pdf_data)
+            #                     progress_bar.progress((index + 1) / total)
 
-                        logging.info(f"ACTION | User: {st.session_state.target_email} | Generated BULK ZIP for all {len(parking_df)} assigned parking records")
-                        st.success("ZIP package generated successfully!")
-                        st.download_button(
-                            label="⬇️ Download All PDFs (ZIP)",
-                            data=zip_buffer.getvalue(),
-                            file_name="All_Parking_Letters.zip",
-                            mime="application/zip",
-                        )
+            #             logging.info(f"ACTION | User: {st.session_state.target_email} | Generated BULK ZIP for all {len(parking_df)} assigned parking records")
+            #             st.success("ZIP package generated successfully!")
+            #             st.download_button(
+            #                 label="⬇️ Download All PDFs (ZIP)",
+            #                 data=zip_buffer.getvalue(),
+            #                 file_name="All_Parking_Letters.zip",
+            #                 mime="application/zip",
+            #             )
 
     # --- 8. SECURE COMPLIANCE VIEWER PANEL FOR SUPERADMIN ---
     if st.session_state.target_email == SUPERADMIN_EMAIL:
