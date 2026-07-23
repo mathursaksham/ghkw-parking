@@ -306,7 +306,7 @@ else:
             with col1:
                 st.header("🔍 Search & Select Flats")
                 search_query = st.text_input(
-                    "Search by Flat / Block (e.g., 'C5', 'A', 'A1-003'):",
+                    "Search by Flat / Block (e.g., 'C5', 'A', 'A1-003'): If you are unable to find your flat please click Reload Excel Data on Left Panel",
                     placeholder="Type to filter rows...",
                 ).strip()
 
